@@ -638,11 +638,11 @@ const player = {
   lastHit: null, lastHitT: -99, drift: { on: false, dir: 0, charge: 0 }, steerVis: 0, wrongT: 0, finished: false,
 };
 const AI_DEFS = [
-  { name: 'Blaze', color: 0xe0242c, helmet: 0x222222, max: 49, skill: 0.9 },
-  { name: 'Moss', color: 0x2fae4a, helmet: 0xffffff, max: 48, skill: 0.75 },
-  { name: 'Violet', color: 0x8a3ffc, helmet: 0xffd23f, max: 47.5, skill: 0.8 },
-  { name: 'Rusty', color: 0xf07a1a, helmet: 0x3355ff, max: 46.5, skill: 0.65 },
-  { name: 'Frost', color: 0x2fc6e6, helmet: 0xff3366, max: 46, skill: 0.7 },
+  { name: 'Blaze', color: 0xe0242c, helmet: 0x222222, max: 34.5, skill: 0.9 },
+  { name: 'Moss', color: 0x2fae4a, helmet: 0xffffff, max: 33.5, skill: 0.75 },
+  { name: 'Violet', color: 0x8a3ffc, helmet: 0xffd23f, max: 33, skill: 0.8 },
+  { name: 'Rusty', color: 0xf07a1a, helmet: 0x3355ff, max: 32.5, skill: 0.65 },
+  { name: 'Frost', color: 0x2fc6e6, helmet: 0xff3366, max: 32, skill: 0.7 },
 ];
 const ais = AI_DEFS.map((d, i) => ({
   ...d, mesh: makeKart(d.color, d.helmet), f: 0, dist: 0, lat: 0, latV: 0, speed: 0, y: 0, vy: 0, pos: new V3(),
@@ -748,8 +748,8 @@ function updatePlayer(dt) {
   if (!p.falling) {
     if (state === 'countdown') { p.speed = 0; }
     else {
-      const boosting = p.boostT > 0, maxS = boosting ? 72 : (p.finished ? 30 : 48);
-      if (gas) p.speed = approach(p.speed, maxS, (boosting ? 70 : 26) * dt);
+      const boosting = p.boostT > 0, maxS = boosting ? 50 : (p.finished ? 21 : 34);
+      if (gas) p.speed = approach(p.speed, maxS, (boosting ? 50 : 19) * dt);
       else if (brake) p.speed = approach(p.speed, -14, (p.speed > 0 ? 55 : 18) * dt);
       else p.speed = approach(p.speed, 0, 12 * dt);
       if (p.speed > maxS) p.speed = approach(p.speed, maxS, 20 * dt);
@@ -757,12 +757,12 @@ function updatePlayer(dt) {
 
       // drift
       const d = p.drift;
-      if (input.drift && racing && !d.on && steer !== 0 && p.speed > 18 && p.y <= groundY + 0.05) {
+      if (input.drift && racing && !d.on && steer !== 0 && p.speed > 13 && p.y <= groundY + 0.05) {
         d.on = true; d.dir = steer; d.charge = 0; p.vy = 5;
       }
       let eff = steer;
       if (d.on) {
-        if (!input.drift || p.speed < 12 || !racing) {
+        if (!input.drift || p.speed < 9 || !racing) {
           if (d.charge > 1.5) { p.boostT = 1.1; sfx('boost'); }
           else if (d.charge > 0.7) { p.boostT = 0.6; sfx('boost'); }
           d.on = false;
@@ -778,7 +778,7 @@ function updatePlayer(dt) {
         }
       }
       const sf = clamp(Math.abs(p.speed) / 10, 0, 1) * Math.sign(p.speed || 1);
-      const rate = (d.on ? 2.3 : 2.05) - Math.min(Math.abs(p.speed) / 72, 1) * 0.55;
+      const rate = (d.on ? 2.3 : 2.05) - Math.min(Math.abs(p.speed) / 50, 1) * 0.55;
       p.heading -= eff * rate * sf * dt;
       p.steerVis = approach(p.steerVis, d.on ? d.dir * 0.4 : 0, dt * 3);
     }
@@ -894,10 +894,10 @@ function updateAI(a, dt) {
   // rubber-banding around the player keeps the pack interesting
   const gap = a.dist - player.dist;
   let maxS = a.max * (gap > 150 ? 0.88 : gap < -60 ? 1.12 : 1);
-  if (a.done) maxS = 26;
+  if (a.done) maxS = 18;
   const tgt = aiTargetLat(a);
-  if (tgt.zone === 'spike') maxS = Math.min(maxS, 33);
-  a.speed = approach(a.speed, maxS, 22 * dt);
+  if (tgt.zone === 'spike') maxS = Math.min(maxS, 24);
+  a.speed = approach(a.speed, maxS, 16 * dt);
   const latRate = tgt.zone === 'spike' ? 17 : tgt.zone === 'glove' ? 11 : 4;
   const before = a.lat;
   a.lat = approach(a.lat, tgt.lat, latRate * dt);
