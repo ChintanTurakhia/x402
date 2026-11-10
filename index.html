@@ -171,6 +171,7 @@ const N = 1200;             // track samples
 const LAPS = 3;
 const KART_R = 1.25;
 const GRAV = 40;
+const SPEED = 0.3;          // kart speed as a fraction of the original tuning (1 = original)
 
 // ============================================================ renderer / scene
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -522,7 +523,9 @@ const zones = [];   // for warnings + minimap
 const BALL_R = 1.25;
 const ballGeo = new THREE.SphereGeometry(BALL_R, 18, 14);
 const ballMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.7, roughness: 0.35 });
-function addCannon(f, side, phase, period = 1.8) {
+// slower karts sit in a cannon's line of fire longer, so cannons fire less often to keep the same hit odds
+const CANNON_PERIOD = 1.8 * (5.4 / (48 * SPEED) + 0.16) / (5.4 / 48 + 0.16);
+function addCannon(f, side, phase, period = CANNON_PERIOD) {
   const fr = frameAt(f);
   const pos = fr.p.clone().addScaledVector(fr.r, side * (HALF_W + 4)), dir = fr.r.clone().multiplyScalar(-side);
   const g = new THREE.Group(); g.position.copy(pos); g.rotation.y = Math.atan2(dir.x, dir.z); scene.add(g);
@@ -611,7 +614,7 @@ function addBoost(f, lat) {
 {
   // Cannon Alley: between control points 3 and 6
   const c0 = cpIdx[3] + 12;
-  for (let j = 0; j < 5; j++) addCannon(wrap(c0 + j * 40), j % 2 ? -1 : 1, 0.6 + j * 0.37);
+  for (let j = 0; j < 5; j++) addCannon(wrap(c0 + j * 40), j % 2 ? -1 : 1, 0.6 + j * 0.37 * CANNON_PERIOD / 1.8);
   zones.push({ name: '💣 CANNON ALLEY', f0: wrap(c0 - 10), f1: wrap(c0 + 170), color: '#ff5a3c' });
 
   // Spike Zigzag: over the hill, control points 8 → 10
@@ -638,11 +641,11 @@ const player = {
   lastHit: null, lastHitT: -99, drift: { on: false, dir: 0, charge: 0 }, steerVis: 0, wrongT: 0, finished: false,
 };
 const AI_DEFS = [
-  { name: 'Blaze', color: 0xe0242c, helmet: 0x222222, max: 34.5, skill: 0.9 },
-  { name: 'Moss', color: 0x2fae4a, helmet: 0xffffff, max: 33.5, skill: 0.75 },
-  { name: 'Violet', color: 0x8a3ffc, helmet: 0xffd23f, max: 33, skill: 0.8 },
-  { name: 'Rusty', color: 0xf07a1a, helmet: 0x3355ff, max: 32.5, skill: 0.65 },
-  { name: 'Frost', color: 0x2fc6e6, helmet: 0xff3366, max: 32, skill: 0.7 },
+  { name: 'Blaze', color: 0xe0242c, helmet: 0x222222, max: 49 * SPEED, skill: 0.9 },
+  { name: 'Moss', color: 0x2fae4a, helmet: 0xffffff, max: 48 * SPEED, skill: 0.75 },
+  { name: 'Violet', color: 0x8a3ffc, helmet: 0xffd23f, max: 47.5 * SPEED, skill: 0.8 },
+  { name: 'Rusty', color: 0xf07a1a, helmet: 0x3355ff, max: 46.5 * SPEED, skill: 0.65 },
+  { name: 'Frost', color: 0x2fc6e6, helmet: 0xff3366, max: 46 * SPEED, skill: 0.7 },
 ];
 const ais = AI_DEFS.map((d, i) => ({
   ...d, mesh: makeKart(d.color, d.helmet), f: 0, dist: 0, lat: 0, latV: 0, speed: 0, y: 0, vy: 0, pos: new V3(),
@@ -748,21 +751,21 @@ function updatePlayer(dt) {
   if (!p.falling) {
     if (state === 'countdown') { p.speed = 0; }
     else {
-      const boosting = p.boostT > 0, maxS = boosting ? 50 : (p.finished ? 21 : 34);
-      if (gas) p.speed = approach(p.speed, maxS, (boosting ? 50 : 19) * dt);
-      else if (brake) p.speed = approach(p.speed, -14, (p.speed > 0 ? 55 : 18) * dt);
-      else p.speed = approach(p.speed, 0, 12 * dt);
-      if (p.speed > maxS) p.speed = approach(p.speed, maxS, 20 * dt);
+      const boosting = p.boostT > 0, maxS = (boosting ? 72 : (p.finished ? 30 : 48)) * SPEED;
+      if (gas) p.speed = approach(p.speed, maxS, (boosting ? 70 : 26) * SPEED * dt);
+      else if (brake) p.speed = approach(p.speed, -14 * SPEED, (p.speed > 0 ? 55 : 18) * SPEED * dt);
+      else p.speed = approach(p.speed, 0, 12 * SPEED * dt);
+      if (p.speed > maxS) p.speed = approach(p.speed, maxS, 20 * SPEED * dt);
       p.boostT = Math.max(0, p.boostT - dt);
 
       // drift
       const d = p.drift;
-      if (input.drift && racing && !d.on && steer !== 0 && p.speed > 13 && p.y <= groundY + 0.05) {
+      if (input.drift && racing && !d.on && steer !== 0 && p.speed > 18 * SPEED && p.y <= groundY + 0.05) {
         d.on = true; d.dir = steer; d.charge = 0; p.vy = 5;
       }
       let eff = steer;
       if (d.on) {
-        if (!input.drift || p.speed < 9 || !racing) {
+        if (!input.drift || p.speed < 12 * SPEED || !racing) {
           if (d.charge > 1.5) { p.boostT = 1.1; sfx('boost'); }
           else if (d.charge > 0.7) { p.boostT = 0.6; sfx('boost'); }
           d.on = false;
@@ -777,8 +780,8 @@ function updatePlayer(dt) {
           }
         }
       }
-      const sf = clamp(Math.abs(p.speed) / 10, 0, 1) * Math.sign(p.speed || 1);
-      const rate = (d.on ? 2.3 : 2.05) - Math.min(Math.abs(p.speed) / 50, 1) * 0.55;
+      const sf = clamp(Math.abs(p.speed) / (10 * SPEED), 0, 1) * Math.sign(p.speed || 1);
+      const rate = (d.on ? 2.3 : 2.05) - Math.min(Math.abs(p.speed) / (72 * SPEED), 1) * 0.55;
       p.heading -= eff * rate * sf * dt;
       p.steerVis = approach(p.steerVis, d.on ? d.dir * 0.4 : 0, dt * 3);
     }
@@ -810,7 +813,7 @@ function updatePlayer(dt) {
       }
       // wrong way
       const facing = Math.abs(angDiff(p.heading, q.h));
-      p.wrongT = facing > 1.9 && p.speed > 5 ? p.wrongT + dt : 0;
+      p.wrongT = facing > 1.9 && p.speed > 5 * SPEED ? p.wrongT + dt : 0;
     }
   } else {
     p.vy -= GRAV * dt; p.y += p.vy * dt; p.fallT += dt;
@@ -894,10 +897,10 @@ function updateAI(a, dt) {
   // rubber-banding around the player keeps the pack interesting
   const gap = a.dist - player.dist;
   let maxS = a.max * (gap > 150 ? 0.88 : gap < -60 ? 1.12 : 1);
-  if (a.done) maxS = 18;
+  if (a.done) maxS = 26 * SPEED;
   const tgt = aiTargetLat(a);
-  if (tgt.zone === 'spike') maxS = Math.min(maxS, 24);
-  a.speed = approach(a.speed, maxS, 16 * dt);
+  if (tgt.zone === 'spike') maxS = Math.min(maxS, 33 * SPEED);
+  a.speed = approach(a.speed, maxS, 22 * SPEED * dt);
   const latRate = tgt.zone === 'spike' ? 17 : tgt.zone === 'glove' ? 11 : 4;
   const before = a.lat;
   a.lat = approach(a.lat, tgt.lat, latRate * dt);
@@ -1037,7 +1040,7 @@ function updateCamera(dt) {
     camera.position.add(new V3((Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)).multiplyScalar(shakeT * 1.6));
   }
   camera.lookAt(cam.look);
-  const fovT = 68 + clamp(p.speed, 0, 75) * 0.12 + (p.boostT > 0 ? 8 : 0);
+  const fovT = 68 + clamp(p.speed / SPEED, 0, 75) * 0.12 + (p.boostT > 0 ? 8 : 0);
   camera.fov += (fovT - camera.fov) * (1 - Math.exp(-4 * dt));
   camera.updateProjectionMatrix();
 }
